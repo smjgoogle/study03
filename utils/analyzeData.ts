@@ -1,4 +1,4 @@
-import { AnalysisResult, ColumnInfo, DataShape, DataType } from '@/types/analysis';
+import { AnalysisResult, ColumnInfo, DataShape, DataType, ParsedData } from '@/types/analysis';
 
 function isNull(v: unknown): boolean {
   return v === null || v === undefined || v === '';
@@ -69,10 +69,12 @@ function analyzeColumn(name: string, values: unknown[]): ColumnInfo {
 }
 
 export function analyzeData(
-  data: Record<string, unknown>[],
+  parsed: ParsedData,
   fileName: string
 ): AnalysisResult {
-  if (data.length === 0) {
+  const { columns: colNames, rows: data } = parsed;
+
+  if (data.length === 0 || colNames.length === 0) {
     return {
       fileName,
       shape: { rows: 0, cols: 0, totalCells: 0, totalMissing: 0, missingPercent: 0 },
@@ -81,7 +83,6 @@ export function analyzeData(
     };
   }
 
-  const colNames = Object.keys(data[0]);
   const columns = colNames.map((name) =>
     analyzeColumn(name, data.map((row) => row[name]))
   );

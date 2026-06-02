@@ -29,3 +29,8 @@ export interface AnalysisResult {
 }
 
 export type MenuKey = 'columns' | 'shape' | 'types' | 'missing';
+
+export interface ParsedData {
+  columns: string[];
+  rows: Record<string, unknown>[];
+}
