@@ -345,8 +345,10 @@ function CategoryChart({ col, rows, colorOffset, numericCols, onSliceClick }: {
 }
 
 const PAGE_SIZE = 20;
+// 고유값이 이 수 이하이면 드롭다운 선택으로 처리
+const DROPDOWN_MAX_UNIQUE = 20;
 
-/** 데이터 테이블 — 컬럼별 검색 + 페이징 */
+/** 데이터 테이블 — 컬럼별 검색(텍스트/드롭다운) + 페이징, No 역순 */
 function DataTable({ rows, columns, filters, onFiltersChange }: {
   rows: Record<string, unknown>[];
   columns: string[];
@@ -355,28 +357,50 @@ function DataTable({ rows, columns, filters, onFiltersChange }: {
 }) {
   const [page, setPage] = useState(1);
 
+  // 컬럼별 고유값 목록 (전체 rows 기준)
+  const uniqueValues = useMemo(() => {
+    const map: Record<string, string[]> = {};
+    for (const col of columns) {
+      const set = new Set<string>();
+      for (const row of rows) {
+        const v = row[col];
+        if (v !== null && v !== undefined && v !== '') set.add(String(v));
+      }
+      map[col] = Array.from(set).sort((a, b) => a.localeCompare(b, 'ko'));
+    }
+    return map;
+  }, [rows, columns]);
+
+  // 드롭다운 여부: 고유값 수 ≤ DROPDOWN_MAX_UNIQUE
+  const isDropdown = useCallback((col: string) =>
+    (uniqueValues[col]?.length ?? 0) <= DROPDOWN_MAX_UNIQUE,
+  [uniqueValues]);
+
   // 검색어 변경 시 1페이지로 리셋
   function setFilter(col: string, value: string) {
     onFiltersChange({ ...filters, [col]: value });
     setPage(1);
   }
 
-  // 컬럼별 검색 필터 적용
+  // 컬럼별 검색 필터 적용 (드롭다운은 완전 일치, 텍스트는 포함)
   const filtered = useMemo(() => {
     const activeFilters = Object.entries(filters).filter(([, v]) => v.trim() !== '');
     if (activeFilters.length === 0) return rows;
     return rows.filter((row) =>
-      activeFilters.every(([col, keyword]) =>
-        String(row[col] ?? '').toLowerCase().includes(keyword.toLowerCase())
-      )
+      activeFilters.every(([col, keyword]) => {
+        const cell = String(row[col] ?? '');
+        return isDropdown(col)
+          ? cell === keyword
+          : cell.toLowerCase().includes(keyword.toLowerCase());
+      })
     );
-  }, [rows, filters]);
+  }, [rows, filters, isDropdown]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
-  // 페이지 번호 목록 (최대 7개 표시)
+  // 페이지 번호 목록
   const pageNums = useMemo(() => {
     const delta = 3;
     const range: number[] = [];
@@ -415,7 +439,7 @@ function DataTable({ rows, columns, filters, onFiltersChange }: {
           <thead>
             {/* 컬럼명 행 */}
             <tr className="bg-gray-50 text-gray-500 text-left">
-              <th className="px-3 py-2.5 font-medium text-gray-400 border-r border-gray-100 sticky left-0 bg-gray-50">행</th>
+              <th className="px-3 py-2.5 font-medium text-gray-400 border-r border-gray-100 sticky left-0 bg-gray-50">No</th>
               {columns.map((col) => (
                 <th key={col} className="px-4 py-2.5 font-medium">{col}</th>
               ))}
@@ -425,15 +449,30 @@ function DataTable({ rows, columns, filters, onFiltersChange }: {
               <td className="px-2 py-1.5 border-r border-gray-100 sticky left-0 bg-white" />
               {columns.map((col) => (
                 <td key={col} className="px-2 py-1.5">
-                  <input
-                    type="text"
-                    placeholder="검색..."
-                    value={filters[col] ?? ''}
-                    onChange={(e) => setFilter(col, e.target.value)}
-                    className={`w-full min-w-[80px] rounded border px-2 py-1 text-xs outline-none transition-colors duration-150
-                      ${filters[col] ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}
-                      focus:border-blue-400 focus:bg-blue-50`}
-                  />
+                  {isDropdown(col) ? (
+                    <select
+                      value={filters[col] ?? ''}
+                      onChange={(e) => setFilter(col, e.target.value)}
+                      className={`w-full min-w-[90px] rounded border px-2 py-1 text-xs outline-none transition-colors duration-150 bg-white cursor-pointer
+                        ${filters[col] ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}
+                        focus:border-blue-400`}
+                    >
+                      <option value="">전체</option>
+                      {uniqueValues[col]?.map((v) => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="검색..."
+                      value={filters[col] ?? ''}
+                      onChange={(e) => setFilter(col, e.target.value)}
+                      className={`w-full min-w-[80px] rounded border px-2 py-1 text-xs outline-none transition-colors duration-150
+                        ${filters[col] ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}
+                        focus:border-blue-400 focus:bg-blue-50`}
+                    />
+                  )}
                 </td>
               ))}
             </tr>
@@ -447,11 +486,13 @@ function DataTable({ rows, columns, filters, onFiltersChange }: {
               </tr>
             ) : (
               pageRows.map((row, ri) => {
+                // No: 역순 (전체 filtered 기준 내림차순)
                 const globalIdx = (safePage - 1) * PAGE_SIZE + ri + 1;
+                const displayNo = filtered.length - globalIdx + 1;
                 return (
                   <tr key={ri} className="hover:bg-gray-50 transition-colors duration-100">
-                    <td className="px-3 py-2 text-gray-400 text-center border-r border-gray-100 sticky left-0 bg-white">
-                      {globalIdx}
+                    <td className="px-3 py-2 text-gray-400 text-center border-r border-gray-100 sticky left-0 bg-white font-mono">
+                      {displayNo}
                     </td>
                     {columns.map((col) => {
                       const val = row[col];
