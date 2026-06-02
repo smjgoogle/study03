@@ -324,47 +324,195 @@ function CategoryChart({ col, rows, colorOffset, numericCols }: {
   );
 }
 
-/** 데이터 테이블 (상위 20행) */
+const PAGE_SIZE = 20;
+
+/** 데이터 테이블 — 컬럼별 검색 + 페이징 */
 function DataTable({ rows, columns }: { rows: Record<string, unknown>[]; columns: string[] }) {
-  const preview = rows.slice(0, 20);
+  const [filters, setFilters] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
+
+  // 검색어 변경 시 1페이지로 리셋
+  function setFilter(col: string, value: string) {
+    setFilters((prev) => ({ ...prev, [col]: value }));
+    setPage(1);
+  }
+
+  // 컬럼별 검색 필터 적용
+  const filtered = useMemo(() => {
+    const activeFilters = Object.entries(filters).filter(([, v]) => v.trim() !== '');
+    if (activeFilters.length === 0) return rows;
+    return rows.filter((row) =>
+      activeFilters.every(([col, keyword]) =>
+        String(row[col] ?? '').toLowerCase().includes(keyword.toLowerCase())
+      )
+    );
+  }, [rows, filters]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  // 페이지 번호 목록 (최대 7개 표시)
+  const pageNums = useMemo(() => {
+    const delta = 3;
+    const range: number[] = [];
+    for (let i = Math.max(1, safePage - delta); i <= Math.min(totalPages, safePage + delta); i++) {
+      range.push(i);
+    }
+    return range;
+  }, [safePage, totalPages]);
+
+  const hasActiveFilter = Object.values(filters).some((v) => v.trim() !== '');
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
-      <div className="px-5 py-3 border-b border-gray-100">
-        <span className="text-sm font-semibold text-gray-700">데이터 테이블</span>
-        <span className="ml-2 text-xs text-gray-400">상위 {preview.length}행 / 전체 {rows.length.toLocaleString()}행</span>
+      {/* 헤더 */}
+      <div className="px-5 py-3 border-b border-gray-100 flex items-center justify-between flex-wrap gap-2">
+        <div>
+          <span className="text-sm font-semibold text-gray-700">데이터 테이블</span>
+          <span className="ml-2 text-xs text-gray-400">
+            {filtered.length.toLocaleString()}건
+            {hasActiveFilter && <span className="text-blue-500"> (필터 적용 / 전체 {rows.length.toLocaleString()}건)</span>}
+          </span>
+        </div>
+        {hasActiveFilter && (
+          <button
+            onClick={() => { setFilters({}); setPage(1); }}
+            className="text-xs text-gray-400 hover:text-red-500 transition-colors duration-150"
+          >
+            필터 초기화
+          </button>
+        )}
       </div>
+
+      {/* 테이블 */}
       <div className="overflow-x-auto">
         <table className="text-xs whitespace-nowrap w-full">
           <thead>
+            {/* 컬럼명 행 */}
             <tr className="bg-gray-50 text-gray-500 text-left">
               <th className="px-3 py-2.5 font-medium text-gray-400 border-r border-gray-100 sticky left-0 bg-gray-50">행</th>
               {columns.map((col) => (
                 <th key={col} className="px-4 py-2.5 font-medium">{col}</th>
               ))}
             </tr>
+            {/* 검색 입력 행 */}
+            <tr className="bg-white border-b border-gray-100">
+              <td className="px-2 py-1.5 border-r border-gray-100 sticky left-0 bg-white" />
+              {columns.map((col) => (
+                <td key={col} className="px-2 py-1.5">
+                  <input
+                    type="text"
+                    placeholder="검색..."
+                    value={filters[col] ?? ''}
+                    onChange={(e) => setFilter(col, e.target.value)}
+                    className={`w-full min-w-[80px] rounded border px-2 py-1 text-xs outline-none transition-colors duration-150
+                      ${filters[col] ? 'border-blue-400 bg-blue-50 text-blue-700' : 'border-gray-200 text-gray-600'}
+                      focus:border-blue-400 focus:bg-blue-50`}
+                  />
+                </td>
+              ))}
+            </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {preview.map((row, ri) => (
-              <tr key={ri} className="hover:bg-gray-50 transition-colors duration-100">
-                <td className="px-3 py-2 text-gray-400 text-center border-r border-gray-100 sticky left-0 bg-white">{ri + 1}</td>
-                {columns.map((col) => {
-                  const val = row[col];
-                  const empty = val === null || val === undefined || val === '';
-                  return (
-                    <td key={col} className={`px-4 py-2 max-w-[160px] truncate ${empty ? 'text-gray-300 italic' : 'text-gray-700'}`}>
-                      {empty ? (
-                        <span className="flex items-center gap-1">
-                          <AlertTriangle size={10} className="text-amber-400" />null
-                        </span>
-                      ) : String(val)}
-                    </td>
-                  );
-                })}
+            {pageRows.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + 1} className="px-5 py-8 text-center text-gray-400">
+                  검색 결과가 없습니다.
+                </td>
               </tr>
-            ))}
+            ) : (
+              pageRows.map((row, ri) => {
+                const globalIdx = (safePage - 1) * PAGE_SIZE + ri + 1;
+                return (
+                  <tr key={ri} className="hover:bg-gray-50 transition-colors duration-100">
+                    <td className="px-3 py-2 text-gray-400 text-center border-r border-gray-100 sticky left-0 bg-white">
+                      {globalIdx}
+                    </td>
+                    {columns.map((col) => {
+                      const val = row[col];
+                      const empty = val === null || val === undefined || val === '';
+                      const keyword = filters[col]?.toLowerCase() ?? '';
+                      const text = empty ? '' : String(val);
+                      const matchIdx = keyword ? text.toLowerCase().indexOf(keyword) : -1;
+
+                      return (
+                        <td key={col} className={`px-4 py-2 max-w-[160px] ${empty ? 'text-gray-300 italic' : 'text-gray-700'}`}>
+                          {empty ? (
+                            <span className="flex items-center gap-1">
+                              <AlertTriangle size={10} className="text-amber-400" />null
+                            </span>
+                          ) : matchIdx >= 0 && keyword ? (
+                            <span>
+                              {text.slice(0, matchIdx)}
+                              <mark className="bg-yellow-200 text-gray-800 rounded-sm">{text.slice(matchIdx, matchIdx + keyword.length)}</mark>
+                              {text.slice(matchIdx + keyword.length)}
+                            </span>
+                          ) : (
+                            <span className="truncate block">{text}</span>
+                          )}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
+            )}
           </tbody>
         </table>
       </div>
+
+      {/* 페이징 */}
+      {totalPages > 1 && (
+        <div className="px-5 py-3 border-t border-gray-100 flex items-center justify-between flex-wrap gap-3">
+          <p className="text-xs text-gray-400">
+            {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} / {filtered.length.toLocaleString()}건
+          </p>
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={safePage === 1}
+              className="px-2 py-1 rounded text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              «
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1}
+              className="px-2 py-1 rounded text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              ‹
+            </button>
+            {pageNums.map((n) => (
+              <button
+                key={n}
+                onClick={() => setPage(n)}
+                className={`px-2.5 py-1 rounded text-xs font-medium transition-colors duration-150 ${
+                  n === safePage
+                    ? 'bg-blue-600 text-white'
+                    : 'text-gray-600 hover:bg-gray-100'
+                }`}
+              >
+                {n}
+              </button>
+            ))}
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages}
+              className="px-2 py-1 rounded text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              ›
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={safePage === totalPages}
+              className="px-2 py-1 rounded text-xs text-gray-500 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed"
+            >
+              »
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -463,7 +611,7 @@ export default function SalesView({ parsedData }: Props) {
 
       {/* 데이터 테이블 */}
       <section>
-        <DataTable rows={filteredRows} columns={columns} />
+        <DataTable key={`${activeSheet}-${activeMonth}`} rows={filteredRows} columns={columns} />
       </section>
     </div>
   );
