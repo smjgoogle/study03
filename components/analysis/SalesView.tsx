@@ -329,7 +329,7 @@ function CategoryChart({ col, rows, colorOffset, numericCols, onSliceClick }: {
                     <Cell key={i} fill={COLORS[(i + colorOffset) % COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value, name) => [`${name}: ${fmt(Number(value))}`, '']} />
+                <Tooltip formatter={(value, name) => [`${name}: ${fmt(Number(value))}원`, '']} />
                 <Legend iconSize={10} formatter={(val) => <span className="text-xs">{val}</span>} />
               </PieChart>
             </ResponsiveContainer>
