@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef, useCallback } from 'react';
 import { ParsedData, SheetData } from '@/types/analysis';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
@@ -173,18 +173,18 @@ function StatCards({ rows, numericCols }: {
 }
 
 /** 수치형 컬럼 — 월별 또는 전체 막대/선 차트 */
-function NumericChart({ col, rows, dateCol, hasMonth, colorIdx }: {
+function NumericChart({ col, rows, dateCol, hasMonth, colorIdx, onBarClick }: {
   col: string;
   rows: Record<string, unknown>[];
   dateCol: string | null;
   hasMonth: boolean;
   colorIdx: number;
+  onBarClick: (label: string) => void;
 }) {
   const color = COLORS[colorIdx % COLORS.length];
 
   const data = useMemo(() => {
     if (dateCol && hasMonth) {
-      // 월별 합계
       const map: Record<number, number> = {};
       for (const row of rows) {
         const mo = extractMonth(row[dateCol]);
@@ -196,7 +196,6 @@ function NumericChart({ col, rows, dateCol, hasMonth, colorIdx }: {
       return MONTH_KR.map((name, i) => ({ name, value: map[i + 1] ?? 0 }));
     }
     if (dateCol) {
-      // 연도별 합계
       const map: Record<number, number> = {};
       for (const row of rows) {
         const yr = extractYear(row[dateCol]);
@@ -209,23 +208,29 @@ function NumericChart({ col, rows, dateCol, hasMonth, colorIdx }: {
         .sort(([a], [b]) => Number(a) - Number(b))
         .map(([yr, value]) => ({ name: `${yr}년`, value }));
     }
-    // 날짜 없음 — 상위 10개 행
     return rows.slice(0, 10).map((r, i) => ({
       name: String(i + 1),
       value: typeof r[col] === 'number' ? (r[col] as number) : 0,
     }));
   }, [col, rows, dateCol, hasMonth]);
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function handleClick(entry: any) {
+    if (!entry?.activePayload?.[0]) return;
+    onBarClick(entry.activePayload[0].payload.name);
+  }
+
   const UseChart = hasMonth ? LineChart : BarChart;
   const DataEl = hasMonth
-    ? <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={{ r: 3 }} name={col} />
-    : <Bar dataKey="value" fill={color} name={col} radius={[4, 4, 0, 0]} />;
+    ? <Line type="monotone" dataKey="value" stroke={color} strokeWidth={2} dot={{ r: 3, cursor: 'pointer' }} activeDot={{ r: 5 }} name={col} />
+    : <Bar dataKey="value" fill={color} name={col} radius={[4, 4, 0, 0]} cursor="pointer" />;
 
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-      <p className="text-sm font-semibold text-gray-700 mb-4">{col}</p>
+      <p className="text-sm font-semibold text-gray-700 mb-1">{col}</p>
+      <p className="text-xs text-gray-400 mb-3">항목 클릭 시 테이블 검색 적용</p>
       <ResponsiveContainer width="100%" height={200}>
-        <UseChart data={data}>
+        <UseChart data={data} onClick={handleClick}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
           <XAxis dataKey="name" tick={{ fontSize: 11 }} />
           <YAxis tick={{ fontSize: 11 }} width={60} tickFormatter={(v) => fmt(v)} />
@@ -238,11 +243,12 @@ function NumericChart({ col, rows, dateCol, hasMonth, colorIdx }: {
 }
 
 /** 범주형 컬럼 — 건수 + 매출액 파이차트 */
-function CategoryChart({ col, rows, colorOffset, numericCols }: {
+function CategoryChart({ col, rows, colorOffset, numericCols, onSliceClick }: {
   col: string;
   rows: Record<string, unknown>[];
   colorOffset: number;
   numericCols: string[];
+  onSliceClick: (col: string, value: string) => void;
 }) {
   // 건수 집계
   const countData = useMemo(() => {
@@ -278,16 +284,26 @@ function CategoryChart({ col, rows, colorOffset, numericCols }: {
 
   if (countData.length === 0) return null;
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  function handleSlice(entry: any) {
+    if (entry?.name) onSliceClick(col, String(entry.name));
+  }
+
   return (
     <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 col-span-1 lg:col-span-2">
-      <p className="text-sm font-semibold text-gray-700 mb-4">{col} 분포</p>
+      <p className="text-sm font-semibold text-gray-700 mb-1">{col} 분포</p>
+      <p className="text-xs text-gray-400 mb-3">항목 클릭 시 테이블 검색 적용</p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
         {/* 건수 차트 */}
         <div>
           <p className="text-xs text-gray-400 text-center mb-2">건수 기준</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={countData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} paddingAngle={2}>
+              <Pie
+                data={countData} dataKey="value" nameKey="name"
+                cx="50%" cy="50%" outerRadius={75} paddingAngle={2}
+                cursor="pointer" onClick={handleSlice}
+              >
                 {countData.map((_, i) => (
                   <Cell key={i} fill={COLORS[(i + colorOffset) % COLORS.length]} />
                 ))}
@@ -304,7 +320,11 @@ function CategoryChart({ col, rows, colorOffset, numericCols }: {
             <p className="text-xs text-gray-400 text-center mb-2">{amountCol} 기준</p>
             <ResponsiveContainer width="100%" height={200}>
               <PieChart>
-                <Pie data={amountData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} paddingAngle={2}>
+                <Pie
+                  data={amountData} dataKey="value" nameKey="name"
+                  cx="50%" cy="50%" outerRadius={75} paddingAngle={2}
+                  cursor="pointer" onClick={handleSlice}
+                >
                   {amountData.map((_, i) => (
                     <Cell key={i} fill={COLORS[(i + colorOffset) % COLORS.length]} />
                   ))}
@@ -327,13 +347,17 @@ function CategoryChart({ col, rows, colorOffset, numericCols }: {
 const PAGE_SIZE = 20;
 
 /** 데이터 테이블 — 컬럼별 검색 + 페이징 */
-function DataTable({ rows, columns }: { rows: Record<string, unknown>[]; columns: string[] }) {
-  const [filters, setFilters] = useState<Record<string, string>>({});
+function DataTable({ rows, columns, filters, onFiltersChange }: {
+  rows: Record<string, unknown>[];
+  columns: string[];
+  filters: Record<string, string>;
+  onFiltersChange: (f: Record<string, string>) => void;
+}) {
   const [page, setPage] = useState(1);
 
   // 검색어 변경 시 1페이지로 리셋
   function setFilter(col: string, value: string) {
-    setFilters((prev) => ({ ...prev, [col]: value }));
+    onFiltersChange({ ...filters, [col]: value });
     setPage(1);
   }
 
@@ -377,7 +401,7 @@ function DataTable({ rows, columns }: { rows: Record<string, unknown>[]; columns
         </div>
         {hasActiveFilter && (
           <button
-            onClick={() => { setFilters({}); setPage(1); }}
+            onClick={() => { onFiltersChange({}); setPage(1); }}
             className="text-xs text-gray-400 hover:text-red-500 transition-colors duration-150"
           >
             필터 초기화
@@ -526,6 +550,8 @@ interface Props {
 export default function SalesView({ parsedData }: Props) {
   const [activeSheet, setActiveSheet] = useState(parsedData.sheets[0]?.name ?? '');
   const [activeMonth, setActiveMonth] = useState<number | null>(null);
+  const [tableFilters, setTableFilters] = useState<Record<string, string>>({});
+  const tableRef = useRef<HTMLDivElement>(null);
 
   // 현재 시트 데이터
   const sheet = useMemo(
@@ -553,18 +579,44 @@ export default function SalesView({ parsedData }: Props) {
   const numericCols = useMemo(() => getNumericCols(columns, rows, dateCol), [columns, rows, dateCol]);
   const categoricalCols = useMemo(() => getCategoricalCols(columns, numericCols, dateCol), [columns, numericCols, dateCol]);
 
+  // 차트 클릭 → 테이블 필터 설정 + 스크롤
+  const applyFilter = useCallback((newFilters: Record<string, string>) => {
+    setTableFilters(newFilters);
+    setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
+  }, []);
+
+  // CategoryChart 슬라이스 클릭
+  const handleSliceClick = useCallback((col: string, value: string) => {
+    applyFilter({ [col]: value });
+  }, [applyFilter]);
+
+  // NumericChart 바/점 클릭 — 날짜 컬럼에 레이블(연도/월 이름) 적용
+  const handleBarClick = useCallback((label: string) => {
+    if (!dateCol) return;
+    // "2023년" → "2023", "1월" → 원본 dateCol 값과 매칭을 위해 숫자 추출
+    const year = label.match(/^(\d{4})년$/)?.[1];
+    const monthName = MONTH_KR.indexOf(label);  // 0-based, -1이면 월 아님
+    if (year) {
+      applyFilter({ [dateCol]: year });
+    } else if (monthName >= 0) {
+      applyFilter({ [dateCol]: String(monthName + 1).padStart(2, '0') });
+    } else {
+      applyFilter({ [dateCol]: label });
+    }
+  }, [dateCol, applyFilter]);
+
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-6xl">
       {/* 시트 탭 */}
       <SheetTabs
         sheets={parsedData.sheets}
         active={activeSheet}
-        onChange={(n) => { setActiveSheet(n); setActiveMonth(null); }}
+        onChange={(n) => { setActiveSheet(n); setActiveMonth(null); setTableFilters({}); }}
       />
 
       {/* 월별 필터 */}
       {hasMonth && (
-        <MonthFilter active={activeMonth} onChange={setActiveMonth} />
+        <MonthFilter active={activeMonth} onChange={(m) => { setActiveMonth(m); setTableFilters({}); }} />
       )}
 
       {/* 요약 카드 */}
@@ -591,6 +643,7 @@ export default function SalesView({ parsedData }: Props) {
                 dateCol={dateCol}
                 hasMonth={hasMonth && activeMonth === null}
                 colorIdx={i}
+                onBarClick={handleBarClick}
               />
             ))}
           </div>
@@ -603,15 +656,25 @@ export default function SalesView({ parsedData }: Props) {
           <h2 className="text-base font-semibold text-gray-800 mb-3">항목별 분포</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {categoricalCols.slice(0, 4).map((col, i) => (
-              <CategoryChart key={col} col={col} rows={filteredRows} colorOffset={i * 2} numericCols={numericCols} />
+              <CategoryChart
+                key={col} col={col} rows={filteredRows}
+                colorOffset={i * 2} numericCols={numericCols}
+                onSliceClick={handleSliceClick}
+              />
             ))}
           </div>
         </section>
       )}
 
       {/* 데이터 테이블 */}
-      <section>
-        <DataTable key={`${activeSheet}-${activeMonth}`} rows={filteredRows} columns={columns} />
+      <section ref={tableRef}>
+        <DataTable
+          key={`${activeSheet}-${activeMonth}`}
+          rows={filteredRows}
+          columns={columns}
+          filters={tableFilters}
+          onFiltersChange={setTableFilters}
+        />
       </section>
     </div>
   );
