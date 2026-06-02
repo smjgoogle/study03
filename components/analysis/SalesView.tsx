@@ -10,6 +10,7 @@ import { AlertTriangle } from 'lucide-react';
 
 // ── 상수 ───────────────────────────────────────────────────────────────────
 const MONTH_KR = ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월'];
+const ALL_MONTHS = [1,2,3,4,5,6,7,8,9,10,11,12];
 const COLORS = ['#3b82f6','#22c55e','#f97316','#a855f7','#ef4444','#14b8a6','#f59e0b','#6366f1'];
 
 // ── 유틸 함수 ──────────────────────────────────────────────────────────────
@@ -75,6 +76,43 @@ function fmt(n: number): string {
 }
 
 // ── 하위 컴포넌트 ──────────────────────────────────────────────────────────
+
+/** 월별 필터 버튼 */
+function MonthFilter({ active, onChange }: {
+  active: number | null;
+  onChange: (m: number | null) => void;
+}) {
+  return (
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-3">
+      <p className="text-xs font-medium text-gray-500 mb-2">월별 필터</p>
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          onClick={() => onChange(null)}
+          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 ${
+            active === null
+              ? 'bg-gray-800 text-white'
+              : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+          }`}
+        >
+          전체
+        </button>
+        {ALL_MONTHS.map((m) => (
+          <button
+            key={m}
+            onClick={() => onChange(m)}
+            className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 ${
+              active === m
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+            }`}
+          >
+            {m}월
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 /** 시트 탭 */
 function SheetTabs({ sheets, active, onChange }: {
@@ -292,6 +330,7 @@ interface Props {
 
 export default function SalesView({ parsedData }: Props) {
   const [activeSheet, setActiveSheet] = useState(parsedData.sheets[0]?.name ?? '');
+  const [activeMonth, setActiveMonth] = useState<number | null>(null);
 
   // 현재 시트 데이터
   const sheet = useMemo(
@@ -310,37 +349,52 @@ export default function SalesView({ parsedData }: Props) {
     return rows.some((r) => extractMonth(r[dateCol]) !== null);
   }, [rows, dateCol]);
 
+  // 월 필터 적용
+  const filteredRows = useMemo(() => {
+    if (!dateCol || activeMonth === null) return rows;
+    return rows.filter((r) => extractMonth(r[dateCol]) === activeMonth);
+  }, [rows, dateCol, activeMonth]);
+
   const numericCols = useMemo(() => getNumericCols(columns, rows, dateCol), [columns, rows, dateCol]);
   const categoricalCols = useMemo(() => getCategoricalCols(columns, numericCols, dateCol), [columns, numericCols, dateCol]);
 
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-6xl">
       {/* 시트 탭 */}
-      <SheetTabs sheets={parsedData.sheets} active={activeSheet} onChange={setActiveSheet} />
+      <SheetTabs
+        sheets={parsedData.sheets}
+        active={activeSheet}
+        onChange={(n) => { setActiveSheet(n); setActiveMonth(null); }}
+      />
+
+      {/* 월별 필터 */}
+      {hasMonth && (
+        <MonthFilter active={activeMonth} onChange={setActiveMonth} />
+      )}
 
       {/* 요약 카드 */}
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3">
-          전체 요약
-          <span className="ml-2 text-xs font-normal text-gray-400">{rows.length.toLocaleString()}건</span>
+          {activeMonth ? `${activeMonth}월 요약` : '전체 요약'}
+          <span className="ml-2 text-xs font-normal text-gray-400">{filteredRows.length.toLocaleString()}건</span>
         </h2>
-        <StatCards rows={rows} numericCols={numericCols} />
+        <StatCards rows={filteredRows} numericCols={numericCols} />
       </section>
 
       {/* 수치형 컬럼 차트 */}
       {numericCols.length > 0 && (
         <section>
           <h2 className="text-base font-semibold text-gray-800 mb-3">
-            항목별 {hasMonth ? '월별' : dateCol ? '연도별' : ''} 추이
+            항목별 {activeMonth ? `${activeMonth}월` : hasMonth ? '월별' : dateCol ? '연도별' : ''} 추이
           </h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {numericCols.map((col, i) => (
               <NumericChart
                 key={col}
                 col={col}
-                rows={rows}
+                rows={filteredRows}
                 dateCol={dateCol}
-                hasMonth={hasMonth}
+                hasMonth={hasMonth && activeMonth === null}
                 colorIdx={i}
               />
             ))}
@@ -354,7 +408,7 @@ export default function SalesView({ parsedData }: Props) {
           <h2 className="text-base font-semibold text-gray-800 mb-3">항목별 분포</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {categoricalCols.slice(0, 4).map((col, i) => (
-              <CategoryChart key={col} col={col} rows={rows} colorOffset={i * 2} />
+              <CategoryChart key={col} col={col} rows={filteredRows} colorOffset={i * 2} />
             ))}
           </div>
         </section>
@@ -362,7 +416,7 @@ export default function SalesView({ parsedData }: Props) {
 
       {/* 데이터 테이블 */}
       <section>
-        <DataTable rows={rows} columns={columns} />
+        <DataTable rows={filteredRows} columns={columns} />
       </section>
     </div>
   );
