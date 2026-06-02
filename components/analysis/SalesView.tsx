@@ -547,10 +547,13 @@ interface Props {
   parsedData: ParsedData;
 }
 
+type BottomTab = 'distribution' | 'table';
+
 export default function SalesView({ parsedData }: Props) {
   const [activeSheet, setActiveSheet] = useState(parsedData.sheets[0]?.name ?? '');
   const [activeMonth, setActiveMonth] = useState<number | null>(null);
   const [tableFilters, setTableFilters] = useState<Record<string, string>>({});
+  const [bottomTab, setBottomTab] = useState<BottomTab>('distribution');
   const tableRef = useRef<HTMLDivElement>(null);
 
   // 현재 시트 데이터
@@ -579,9 +582,10 @@ export default function SalesView({ parsedData }: Props) {
   const numericCols = useMemo(() => getNumericCols(columns, rows, dateCol), [columns, rows, dateCol]);
   const categoricalCols = useMemo(() => getCategoricalCols(columns, numericCols, dateCol), [columns, numericCols, dateCol]);
 
-  // 차트 클릭 → 테이블 필터 설정 + 스크롤
+  // 차트 클릭 → 테이블 탭으로 전환 + 필터 설정 + 스크롤
   const applyFilter = useCallback((newFilters: Record<string, string>) => {
     setTableFilters(newFilters);
+    setBottomTab('table');
     setTimeout(() => tableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50);
   }, []);
 
@@ -650,31 +654,54 @@ export default function SalesView({ parsedData }: Props) {
         </section>
       )}
 
-      {/* 범주형 컬럼 차트 */}
-      {categoricalCols.length > 0 && (
-        <section>
-          <h2 className="text-base font-semibold text-gray-800 mb-3">항목별 분포</h2>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            {categoricalCols.slice(0, 4).map((col, i) => (
-              <CategoryChart
-                key={col} col={col} rows={filteredRows}
-                colorOffset={i * 2} numericCols={numericCols}
-                onSliceClick={handleSliceClick}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* 데이터 테이블 */}
+      {/* 하단 탭 — 항목별 분포 / 데이터 테이블 */}
       <section ref={tableRef}>
-        <DataTable
-          key={`${activeSheet}-${activeMonth}`}
-          rows={filteredRows}
-          columns={columns}
-          filters={tableFilters}
-          onFiltersChange={setTableFilters}
-        />
+        {/* 탭 헤더 */}
+        <div className="flex gap-1 border-b border-gray-200 mb-4">
+          {([
+            { key: 'distribution', label: '항목별 분포' },
+            { key: 'table',        label: '데이터 테이블' },
+          ] as { key: BottomTab; label: string }[]).map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setBottomTab(key)}
+              className={`px-5 py-2.5 text-sm font-medium border-b-2 -mb-px transition-colors duration-150 ${
+                bottomTab === key
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* 탭 콘텐츠 */}
+        {bottomTab === 'distribution' ? (
+          categoricalCols.length > 0 ? (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {categoricalCols.slice(0, 4).map((col, i) => (
+                <CategoryChart
+                  key={col} col={col} rows={filteredRows}
+                  colorOffset={i * 2} numericCols={numericCols}
+                  onSliceClick={handleSliceClick}
+                />
+              ))}
+            </div>
+          ) : (
+            <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-6 py-10 text-center text-sm text-gray-400">
+              범주형 컬럼이 없습니다.
+            </div>
+          )
+        ) : (
+          <DataTable
+            key={`${activeSheet}-${activeMonth}`}
+            rows={filteredRows}
+            columns={columns}
+            filters={tableFilters}
+            onFiltersChange={setTableFilters}
+          />
+        )}
       </section>
     </div>
   );
