@@ -237,13 +237,15 @@ function NumericChart({ col, rows, dateCol, hasMonth, colorIdx }: {
   );
 }
 
-/** 범주형 컬럼 — 파이차트 */
-function CategoryChart({ col, rows, colorOffset }: {
+/** 범주형 컬럼 — 건수 + 매출액 파이차트 */
+function CategoryChart({ col, rows, colorOffset, numericCols }: {
   col: string;
   rows: Record<string, unknown>[];
   colorOffset: number;
+  numericCols: string[];
 }) {
-  const data = useMemo(() => {
+  // 건수 집계
+  const countData = useMemo(() => {
     const map: Record<string, number> = {};
     for (const row of rows) {
       const v = row[col];
@@ -257,22 +259,67 @@ function CategoryChart({ col, rows, colorOffset }: {
       .map(([name, value]) => ({ name, value }));
   }, [col, rows]);
 
-  if (data.length === 0) return null;
+  // 매출액 집계 (첫 번째 수치형 컬럼 기준)
+  const amountCol = numericCols[0] ?? null;
+  const amountData = useMemo(() => {
+    if (!amountCol) return [];
+    const map: Record<string, number> = {};
+    for (const row of rows) {
+      const v = row[col];
+      if (v === null || v === undefined || v === '') continue;
+      const key = String(v);
+      const amt = typeof row[amountCol] === 'number' ? (row[amountCol] as number) : 0;
+      map[key] = (map[key] ?? 0) + amt;
+    }
+    // countData와 같은 카테고리 순서 유지
+    const keys = countData.map((d) => d.name);
+    return keys.map((name) => ({ name, value: map[name] ?? 0 }));
+  }, [col, rows, amountCol, countData]);
+
+  if (countData.length === 0) return null;
 
   return (
-    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
+    <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 col-span-1 lg:col-span-2">
       <p className="text-sm font-semibold text-gray-700 mb-4">{col} 분포</p>
-      <ResponsiveContainer width="100%" height={200}>
-        <PieChart>
-          <Pie data={data} dataKey="value" nameKey="name" cx="40%" cy="50%" outerRadius={75} paddingAngle={2}>
-            {data.map((_, i) => (
-              <Cell key={i} fill={COLORS[(i + colorOffset) % COLORS.length]} />
-            ))}
-          </Pie>
-          <Tooltip formatter={(v) => [`${v}건`, '']} />
-          <Legend iconSize={10} formatter={(val) => <span className="text-xs">{val}</span>} />
-        </PieChart>
-      </ResponsiveContainer>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+        {/* 건수 차트 */}
+        <div>
+          <p className="text-xs text-gray-400 text-center mb-2">건수 기준</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <PieChart>
+              <Pie data={countData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} paddingAngle={2}>
+                {countData.map((_, i) => (
+                  <Cell key={i} fill={COLORS[(i + colorOffset) % COLORS.length]} />
+                ))}
+              </Pie>
+              <Tooltip formatter={(value, name) => [`${name}: ${value}건`, '']} />
+              <Legend iconSize={10} formatter={(val) => <span className="text-xs">{val}</span>} />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* 매출액 차트 */}
+        {amountCol && amountData.some((d) => d.value > 0) ? (
+          <div>
+            <p className="text-xs text-gray-400 text-center mb-2">{amountCol} 기준</p>
+            <ResponsiveContainer width="100%" height={200}>
+              <PieChart>
+                <Pie data={amountData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={75} paddingAngle={2}>
+                  {amountData.map((_, i) => (
+                    <Cell key={i} fill={COLORS[(i + colorOffset) % COLORS.length]} />
+                  ))}
+                </Pie>
+                <Tooltip formatter={(value, name) => [`${name}: ${fmt(Number(value))}`, '']} />
+                <Legend iconSize={10} formatter={(val) => <span className="text-xs">{val}</span>} />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="flex items-center justify-center text-xs text-gray-300">
+            수치형 컬럼 없음
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -408,7 +455,7 @@ export default function SalesView({ parsedData }: Props) {
           <h2 className="text-base font-semibold text-gray-800 mb-3">항목별 분포</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {categoricalCols.slice(0, 4).map((col, i) => (
-              <CategoryChart key={col} col={col} rows={filteredRows} colorOffset={i * 2} />
+              <CategoryChart key={col} col={col} rows={filteredRows} colorOffset={i * 2} numericCols={numericCols} />
             ))}
           </div>
         </section>
