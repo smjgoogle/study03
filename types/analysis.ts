@@ -28,9 +28,18 @@ export interface AnalysisResult {
   rawData: Record<string, unknown>[];
 }
 
-export type MenuKey = 'columns' | 'shape' | 'types' | 'missing';
+export type MenuKey = 'overview' | 'sales';
 
-export interface ParsedData {
+export interface SheetData {
+  name: string;
   columns: string[];
   rows: Record<string, unknown>[];
+}
+
+export interface ParsedData {
+  /** 첫 번째 시트 (분석용 기본값) */
+  columns: string[];
+  rows: Record<string, unknown>[];
+  /** XLSX 전체 시트 목록 (CSV는 단일 시트) */
+  sheets: SheetData[];
 }

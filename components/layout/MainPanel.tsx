@@ -1,11 +1,14 @@
 'use client';
 
-import { AnalysisResult } from '@/types/analysis';
+import { AnalysisResult, MenuKey, ParsedData } from '@/types/analysis';
 import DatasetOverview from '@/components/analysis/DatasetOverview';
+import SalesView from '@/components/analysis/SalesView';
 import { Upload, Loader2 } from 'lucide-react';
 
 interface Props {
   result: AnalysisResult | null;
+  parsedData: ParsedData | null;
+  activeMenu: MenuKey;
   loading: boolean;
   error: string | null;
 }
@@ -52,7 +55,7 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-export default function MainPanel({ result, loading, error }: Props) {
+export default function MainPanel({ result, parsedData, activeMenu, loading, error }: Props) {
   return (
     <main className="flex-1 bg-gray-50 min-h-screen overflow-y-auto">
       <div className="h-full">
@@ -60,10 +63,13 @@ export default function MainPanel({ result, loading, error }: Props) {
           <LoadingState />
         ) : error ? (
           <ErrorState message={error} />
-        ) : !result ? (
+        ) : !result || !parsedData ? (
           <EmptyState />
         ) : (
-          <DatasetOverview result={result} />
+          <>
+            {activeMenu === 'overview' && <DatasetOverview result={result} />}
+            {activeMenu === 'sales'    && <SalesView parsedData={parsedData} />}
+          </>
         )}
       </div>
     </main>
