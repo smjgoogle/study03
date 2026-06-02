@@ -102,41 +102,6 @@ function SheetTabs({ sheets, active, onChange }: {
   );
 }
 
-/** 연도 필터 버튼 */
-function YearFilter({ years, active, onChange }: {
-  years: number[];
-  active: number | null;
-  onChange: (y: number | null) => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 flex-wrap">
-      <span className="text-xs font-medium text-gray-500 mr-1">연도 필터</span>
-      <button
-        onClick={() => onChange(null)}
-        className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 ${
-          active === null
-            ? 'bg-gray-800 text-white'
-            : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-        }`}
-      >
-        전체
-      </button>
-      {years.map((y) => (
-        <button
-          key={y}
-          onClick={() => onChange(y)}
-          className={`px-3 py-1 rounded-full text-xs font-medium transition-colors duration-150 ${
-            active === y
-              ? 'bg-blue-600 text-white'
-              : 'bg-white border border-gray-200 text-gray-600 hover:bg-gray-50'
-          }`}
-        >
-          {y}년
-        </button>
-      ))}
-    </div>
-  );
-}
 
 /** 요약 카드 */
 function StatCards({ rows, numericCols }: {
@@ -327,7 +292,6 @@ interface Props {
 
 export default function SalesView({ parsedData }: Props) {
   const [activeSheet, setActiveSheet] = useState(parsedData.sheets[0]?.name ?? '');
-  const [activeYear, setActiveYear] = useState<number | null>(null);
 
   // 현재 시트 데이터
   const sheet = useMemo(
@@ -340,28 +304,11 @@ export default function SalesView({ parsedData }: Props) {
   // 날짜 컬럼 탐지
   const dateCol = useMemo(() => detectDateColumn(columns, rows), [columns, rows]);
 
-  // 연도 목록
-  const years = useMemo(() => {
-    if (!dateCol) return [];
-    const set = new Set<number>();
-    for (const row of rows) {
-      const y = extractYear(row[dateCol]);
-      if (y) set.add(y);
-    }
-    return Array.from(set).sort();
-  }, [rows, dateCol]);
-
-  // 연도 필터 적용 행
-  const filteredRows = useMemo(() => {
-    if (!dateCol || activeYear === null) return rows;
-    return rows.filter((r) => extractYear(r[dateCol]) === activeYear);
-  }, [rows, dateCol, activeYear]);
-
-  // 해당 연도에 월 데이터가 있는지 여부
+  // 월 데이터 여부
   const hasMonth = useMemo(() => {
     if (!dateCol) return false;
-    return filteredRows.some((r) => extractMonth(r[dateCol!]) !== null);
-  }, [filteredRows, dateCol]);
+    return rows.some((r) => extractMonth(r[dateCol]) !== null);
+  }, [rows, dateCol]);
 
   const numericCols = useMemo(() => getNumericCols(columns, rows, dateCol), [columns, rows, dateCol]);
   const categoricalCols = useMemo(() => getCategoricalCols(columns, numericCols, dateCol), [columns, numericCols, dateCol]);
@@ -369,22 +316,15 @@ export default function SalesView({ parsedData }: Props) {
   return (
     <div className="p-6 md:p-8 space-y-6 max-w-6xl">
       {/* 시트 탭 */}
-      <SheetTabs sheets={parsedData.sheets} active={activeSheet} onChange={(n) => { setActiveSheet(n); setActiveYear(null); }} />
-
-      {/* 연도 필터 */}
-      {years.length > 0 && (
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm px-5 py-3">
-          <YearFilter years={years} active={activeYear} onChange={setActiveYear} />
-        </div>
-      )}
+      <SheetTabs sheets={parsedData.sheets} active={activeSheet} onChange={setActiveSheet} />
 
       {/* 요약 카드 */}
       <section>
         <h2 className="text-base font-semibold text-gray-800 mb-3">
-          {activeYear ? `${activeYear}년 요약` : '전체 요약'}
-          <span className="ml-2 text-xs font-normal text-gray-400">{filteredRows.length.toLocaleString()}건</span>
+          전체 요약
+          <span className="ml-2 text-xs font-normal text-gray-400">{rows.length.toLocaleString()}건</span>
         </h2>
-        <StatCards rows={filteredRows} numericCols={numericCols} />
+        <StatCards rows={rows} numericCols={numericCols} />
       </section>
 
       {/* 수치형 컬럼 차트 */}
@@ -398,7 +338,7 @@ export default function SalesView({ parsedData }: Props) {
               <NumericChart
                 key={col}
                 col={col}
-                rows={filteredRows}
+                rows={rows}
                 dateCol={dateCol}
                 hasMonth={hasMonth}
                 colorIdx={i}
@@ -414,7 +354,7 @@ export default function SalesView({ parsedData }: Props) {
           <h2 className="text-base font-semibold text-gray-800 mb-3">항목별 분포</h2>
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {categoricalCols.slice(0, 4).map((col, i) => (
-              <CategoryChart key={col} col={col} rows={filteredRows} colorOffset={i * 2} />
+              <CategoryChart key={col} col={col} rows={rows} colorOffset={i * 2} />
             ))}
           </div>
         </section>
@@ -422,7 +362,7 @@ export default function SalesView({ parsedData }: Props) {
 
       {/* 데이터 테이블 */}
       <section>
-        <DataTable rows={filteredRows} columns={columns} />
+        <DataTable rows={rows} columns={columns} />
       </section>
     </div>
   );
