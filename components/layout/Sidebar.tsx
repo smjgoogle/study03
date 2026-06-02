@@ -1,44 +1,21 @@
 'use client';
 
-import { BarChart2, Table2, Rows3, PieChart, HelpCircle, X, Menu } from 'lucide-react';
-import { AnalysisResult, MenuKey } from '@/types/analysis';
+import { BarChart2, X, Menu } from 'lucide-react';
+import { AnalysisResult } from '@/types/analysis';
 import FileUploader from '@/components/upload/FileUploader';
-
-interface MenuItem {
-  key: MenuKey;
-  label: string;
-  icon: React.ReactNode;
-}
-
-const MENU_ITEMS: MenuItem[] = [
-  { key: 'columns', label: '컬럼 정보', icon: <Table2 size={16} /> },
-  { key: 'shape', label: '데이터 형태', icon: <Rows3 size={16} /> },
-  { key: 'types', label: '데이터 타입', icon: <PieChart size={16} /> },
-  { key: 'missing', label: '결측치 분석', icon: <HelpCircle size={16} /> },
-];
 
 interface Props {
   result: AnalysisResult | null;
-  activeMenu: MenuKey;
-  onMenuChange: (key: MenuKey) => void;
   onFile: (file: File) => void;
   loading: boolean;
   mobileOpen: boolean;
   onMobileToggle: () => void;
 }
 
-export default function Sidebar({
-  result,
-  activeMenu,
-  onMenuChange,
-  onFile,
-  loading,
-  mobileOpen,
-  onMobileToggle,
-}: Props) {
+export default function Sidebar({ result, onFile, loading, mobileOpen, onMobileToggle }: Props) {
   return (
     <>
-      {/* Mobile toggle button */}
+      {/* Mobile toggle */}
       <button
         onClick={onMobileToggle}
         className="fixed top-4 left-4 z-50 md:hidden bg-gray-800 text-white p-2 rounded-lg shadow-lg"
@@ -94,42 +71,13 @@ export default function Sidebar({
           )}
         </div>
 
-        {/* Menu */}
-        {result && (
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            <p className="px-2 pb-2 text-xs font-medium text-gray-500 uppercase tracking-wider">
-              분석 메뉴
-            </p>
-            {MENU_ITEMS.map((item) => (
-              <button
-                key={item.key}
-                onClick={() => {
-                  onMenuChange(item.key);
-                  onMobileToggle();
-                }}
-                className={`
-                  w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm
-                  transition-colors duration-150 text-left
-                  ${activeMenu === item.key
-                    ? 'bg-gray-700 text-white'
-                    : 'text-gray-400 hover:bg-gray-800 hover:text-gray-200'
-                  }
-                `}
-              >
-                {item.icon}
-                {item.label}
-              </button>
-            ))}
-          </nav>
-        )}
-
-        {!result && (
-          <div className="flex-1 flex items-center justify-center px-5">
-            <p className="text-xs text-gray-600 text-center leading-relaxed">
-              파일을 업로드하면<br />분석 메뉴가 표시됩니다
-            </p>
-          </div>
-        )}
+        <div className="flex-1 flex items-center justify-center px-5">
+          <p className="text-xs text-gray-600 text-center leading-relaxed">
+            {result
+              ? `${result.columns.length}개 컬럼 분석 완료`
+              : '파일을 업로드하면\n분석 결과가 표시됩니다'}
+          </p>
+        </div>
       </aside>
     </>
   );

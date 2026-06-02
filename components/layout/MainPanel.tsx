@@ -1,15 +1,11 @@
 'use client';
 
-import { AnalysisResult, MenuKey } from '@/types/analysis';
-import ColumnTable from '@/components/analysis/ColumnTable';
-import ShapeInfo from '@/components/analysis/ShapeInfo';
-import DataTypeChart from '@/components/analysis/DataTypeChart';
-import MissingValues from '@/components/analysis/MissingValues';
+import { AnalysisResult } from '@/types/analysis';
+import DatasetOverview from '@/components/analysis/DatasetOverview';
 import { Upload, Loader2 } from 'lucide-react';
 
 interface Props {
   result: AnalysisResult | null;
-  activeMenu: MenuKey;
   loading: boolean;
   error: string | null;
 }
@@ -56,7 +52,7 @@ function ErrorState({ message }: { message: string }) {
   );
 }
 
-export default function MainPanel({ result, activeMenu, loading, error }: Props) {
+export default function MainPanel({ result, loading, error }: Props) {
   return (
     <main className="flex-1 bg-gray-50 min-h-screen overflow-y-auto">
       <div className="h-full">
@@ -67,14 +63,7 @@ export default function MainPanel({ result, activeMenu, loading, error }: Props)
         ) : !result ? (
           <EmptyState />
         ) : (
-          <div className="p-6 md:p-8 max-w-5xl">
-            {activeMenu === 'columns' && <ColumnTable columns={result.columns} />}
-            {activeMenu === 'shape' && (
-              <ShapeInfo shape={result.shape} fileName={result.fileName} />
-            )}
-            {activeMenu === 'types' && <DataTypeChart columns={result.columns} />}
-            {activeMenu === 'missing' && <MissingValues columns={result.columns} />}
-          </div>
+          <DatasetOverview result={result} />
         )}
       </div>
     </main>
